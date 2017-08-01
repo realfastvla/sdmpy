@@ -16,10 +16,9 @@ def read(sdmfile, sdmscan):
     stoptime_mjd = starttime_mjd + (bdf.numIntegration*inttime)/(24*3600)
     times = np.linspace(starttime_mjd, stoptime_mjd, num=bdf.numIntegration)
 
-    antnums = [int(str(antenna).lstrip('ea')) for antenna in scan.antennas]
-    baselines = np.array([[antnums[i], int(antnums[j])]
-                          for j in range(bdf.numAntenna)
-                          for i in range(0, j)])
+    baselines = ['{0}-{1}'.format(scan.antennas[i], scan.antennas[j])
+                 for j in range(bdf.numAntenna)
+                 for i in range(0, j)]
 
     spws = scan.reffreqs
     bins = [0]  # **hack**
