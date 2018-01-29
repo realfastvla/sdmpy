@@ -5,14 +5,17 @@
 import os.path
 from lxml import etree, objectify
 
+from operator import attrgetter
+
 from .scan import Scan
-from .mime import MIMEPart, MIMEHeader
+from .mime import MIMEPart
 
 _install_dir = os.path.abspath(os.path.dirname(__file__))
 _xsd_dir = os.path.join(_install_dir, 'xsd')
 _sdm_xsd = os.path.join(_xsd_dir, 'sdm_all.xsd')
 # Might want to make the schema location settable somehow?
 _sdm_parser = objectify.makeparser(schema=etree.XMLSchema(file=_sdm_xsd))
+
 
 class SDM(object):
     """
@@ -28,19 +31,19 @@ class SDM(object):
 
     SDM['TableName'] returns the relevant SDMTable object.
     """
-    def __init__(self,path='.',use_xsd=True, bdfdir=''):
-        if use_xsd: parser = _sdm_parser
-        else: parser = None
+    def __init__(self, path='.', use_xsd=True, bdfdir=''):
+        parser = _sdm_parser if use_xsd else None
         self._tables = {}
         self._schemaVersion = {}
         self.path = os.path.abspath(path)
+        assert os.path.exists(self.path), 'No SDM at {0}'.format(self.path)
         self.bdfdir = bdfdir
-        self._asdmtree = objectify.parse(path+'/ASDM.xml',parser)
+        self._asdmtree = objectify.parse(path+'/ASDM.xml', parser)
         self.asdm = self._asdmtree.getroot()
         for tab in self.asdm.Table:
             self._schemaVersion[tab.Name] = tab.Entity.attrib['schemaVersion']
             # TODO, compare schema versions, relax parsing if they don't match
-            self._tables[tab.Name] = sdmtable(tab.Name,path,use_xsd=use_xsd)
+            self._tables[tab.Name] = sdmtable(tab.Name, path, use_xsd=use_xsd)
 
     @property
     def tables(self):
@@ -50,21 +53,21 @@ class SDM(object):
     def __getitem__(self,key):
         return self._tables[key]
 
-    def scan(self,idx):
-        """Return a Scan object for the given scan number."""
-        return Scan(self,str(idx))
+    def scan(self,idx, subidx=1):
+        """Return a Scan object for the given scan/subscan number."""
+        return Scan(self,str(idx),str(subidx))
 
     def scans(self, hasbdf=False):
         """Iterate over scans.  Set hasbdf=True to only return scans for which BDFs exist."""
         # List of SDM scan numbers:
         if hasbdf:
-            scanidx = [s.scanNumber for s in self['Scan']
-                       if self.scan(s.scanNumber).bdf.exists]
+            scanidx = [(s.scanNumber,s.subscanNumber) for s in self['Main']
+                       if os.path.exists(self.scan(s.scanNumber,s.subscanNumber).bdf_fname)]
         else:
-            scanidx = [s.scanNumber for s in self['Scan']]
+            scanidx = [(s.scanNumber,s.subscanNumber) for s in self['Main']]
 
         for idx in scanidx:
-            yield self.scan(idx)
+            yield self.scan(*idx)
 
     def _update_ASDM(self):
         """Updates the ASDM table with the current number of rows."""
@@ -120,31 +123,27 @@ class SDMTable(object):
     Init arguments:
       name = Name of table (not including .xml extension)
       path = Path to SDM directory
-      idtag = Name of ID tag in table (defaults to nameId)
 
     SDMTable[i] returns the i-th row as an lxml objectify object
     """
 
     # Any non-standard Id tag names can be listed here.
     # Note that for some tables a unique key is not a single tag
-    # but is defined as a combination of several tags.  We are
-    # just going to ignore this for now and do something that is
-    # convenient and seems to work for most EVLA data sets.
+    # but is defined as a combination of several tags.  This 
+    # is handled by setting a tuple of keys to be compared against
+    # here.
     _idtags = {
-            'Main': 'scanNumber',
-            'Scan': 'scanNumber',
-            'Subscan': 'scanNumber',
+            'Main': ('scanNumber','subscanNumber'),
+            'Scan': ('scanNumber',),
+            'Subscan': ('scanNumber','subscanNumber'),
             }
 
-    def __init__(self,name,path='.',idtag=None,use_xsd=True):
+    def __init__(self,name,path='.',use_xsd=True):
         self.name = name
-        if idtag is None:
-            try:
-                self.idtag = self._idtags[name]
-            except KeyError:
-                self.idtag = decap(str(name)) + 'Id'
-        else:
-            self.idtag = idtag
+        try:
+            self.idtag = attrgetter(*self._idtags[name])
+        except KeyError:
+            self.idtag = attrgetter(decap(str(name)) + 'Id')
         if use_xsd: parser = _sdm_parser
         else: parser = None
         self._tree = objectify.parse(path+'/'+name+'.xml',parser)
@@ -168,8 +167,17 @@ class SDMTable(object):
             # the matching id tag:
             for r in self._table.row:
                 try:
-                    if str(getattr(r,self.idtag)) == key:
-                        return r
+                    tag = self.idtag(r)
+                    # For multi-key comparsions idtag will return a tuple.
+                    # We'll require key to be a tuple also in this case,
+                    # and need to explicitly check type to avoid problems 
+                    # with string (eg, dont want (1,1) to match '11').
+                    if isinstance(tag,tuple):
+                        if isinstance(key,tuple) and map(str,tag)==map(str,key):
+                            return r
+                    else:
+                        if str(tag) == str(key):
+                            return r
                 except AttributeError:
                     pass
             # No matching rows:
