@@ -1,6 +1,7 @@
-from __future__ import print_function, division, absolute_import #, unicode_literals # not casa compatible
+from __future__ import print_function, division, absolute_import, unicode_literals # not casa compatible
 from builtins import bytes, dict, object, range, map, input#, str # not casa compatible
 from future.utils import itervalues, viewitems, iteritems, listvalues, listitems
+from io import open
 
 import string
 import numpy
@@ -150,7 +151,7 @@ class Scan(object):
 
         ants = self.antennas
         nant = len(ants)
-        nbl = nant*(nant-1)/2
+        nbl = nant*(nant-1)//2
         # return ['%s-%s' % (ants[x[0]], ants[x[1]])
         #        for x in map(bl2ant, range(nbl))]
         return [(ants[x[0]], ants[x[1]])
@@ -239,7 +240,7 @@ class Scan(object):
 
         sdm_ants = self.antennas
         nant = len(sdm_ants)
-        nbl = nant*(nant-1)/2
+        nbl = nant*(nant-1)//2
         t_ns = numpy.array(numpy.array(mjd)*86400.0e9, dtype=numpy.int64)
         exp_ns = int(expand*1e9)
         d_out = t_ns.shape
