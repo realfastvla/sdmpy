@@ -1,8 +1,8 @@
-from __future__ import print_function, division, absolute_import #, unicode_literals # not casa compatible
-from builtins import bytes, dict, object, range, map, input#, str # not casa compatible
+from __future__ import print_function, division, absolute_import, unicode_literals # not casa compatible
+from builtins import bytes, chr, dict, object, range, map, input, str # not casa compatible
 from future.utils import itervalues, viewitems, iteritems, listvalues, listitems
+from io import open
 
-import string
 import os.path
 from collections import OrderedDict
 
@@ -40,18 +40,18 @@ class MIMEHeader(OrderedDict):
             # Since we are using OrderedDict, can get the most recently
             # added key.
             key = list(self.keys())[-1]
-            vals = list(map(string.strip, line[1:].split(';')))
+            vals = [ll.strip() for ll in line[1].split(';')]
             self[key].extend(vals)
         else:
             idx = line.index(':')
             key = line[:idx]
-            vals = list(map(string.strip, line[idx+1:].split(';')))
+            vals = [ll.strip() for ll in line[idx+1:].split(';')]
             self[key] = vals
 
     @staticmethod
     def _asline(key, val):
         """Convert given key and value list to MIME header line."""
-        return key + ': ' + string.join(val, '; ') + '\n'
+        return key + ': ' + '; '.join(val) + '\n'
 
     def tostring(self, key=None):
         """
@@ -126,7 +126,7 @@ class MIMEPart(object):
         # with this approach.
         while True:
 
-            line = fp.readline().replace('\r', '')
+            line = fp.readline().decode('utf-8').replace('\r', '')
 
             # hit EOF
             if line == '':
@@ -178,7 +178,7 @@ class MIMEPart(object):
                         gotit = False
                         while not gotit:
                             junk = fp.read(bs)
-                            bloc = junk.find('--'+boundary)
+                            bloc = junk.find(bytes('--'+boundary, 'utf-8'))
                             br = len(junk)
                             eof = (br < bs)
                             if bloc < 0:

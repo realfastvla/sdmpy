@@ -1,6 +1,7 @@
-from __future__ import print_function, division, absolute_import #, unicode_literals # not casa compatible
+from __future__ import print_function, division, absolute_import, unicode_literals # not casa compatible
 from builtins import bytes, dict, object, range, map, input#, str # not casa compatible
 from future.utils import itervalues, viewitems, iteritems, listvalues, listitems
+from io import open
 
 import os.path
 from lxml import etree, objectify
@@ -270,13 +271,13 @@ class SDMBinaryTable(object):
 
     def __init__(self, name, path, use_xsd=None):
         self.name = name
-        fp = open(path+'/'+name+'.bin', 'r')
+        fp = open(path+'/'+name+'.bin', mode='rb')
         self._data = fp.read()
         fp.seek(0)
         try:
             mimetmp = MIMEPart(fp, recurse=True)
             # Assume part 0 is header; TODO do more checks
-            self.header = objectify.fromstring(mimetmp.body[0].body)
+            self.header = objectify.fromstring(bytes(mimetmp.body[0].body, 'utf-8'))
             self._doffs = mimetmp.body[1].body
             self._dsize = mimetmp.body[1].size
         except RuntimeError:
@@ -290,7 +291,7 @@ class SDMBinaryTable(object):
             outf = os.path.join(newpath, self.name+'.bin')
         else:
             outf = os.path.join(newpath, fname)
-        open(outf, 'w').write(self._data)
+        open(outf, 'wb').write(self._data)
 
     def get_bytes(self, offs, nbytes):
         return self._data[self._doffs+offs:self._doffs+offs+nbytes]

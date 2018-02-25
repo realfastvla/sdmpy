@@ -1,10 +1,10 @@
-from __future__ import print_function, division, absolute_import #, unicode_literals # not casa compatible
+from __future__ import print_function, division, absolute_import, unicode_literals # not casa compatible
 from builtins import bytes, dict, object, range, map, input#, str # not casa compatible
 from future.utils import itervalues, viewitems, iteritems, listvalues, listitems
+from io import open
 
 import os
 import sys
-import string
 import re
 import mmap
 import math
@@ -79,7 +79,7 @@ class BDF(object):
     def __init__(self, fname):
         self.fname = fname
         try:
-            self.fp = open(fname, 'r')
+            self.fp = open(fname, 'rb')
         except IOError:
             self.fp = None
         else:
@@ -115,7 +115,7 @@ class BDF(object):
     def read_mime(self, full_read=False):
         if self.fp:
             self.fp.seek(0, 0)  # Go back to start
-            if not self.fp.readline().startswith('MIME-Version:'):
+            if not self.fp.readline().decode('utf-8').startswith('MIME-Version:'):
                 raise RuntimeError('Invalid BDF: missing MIME-Version')
 
             # First we need to read and parse only the main XML header in order
@@ -126,7 +126,7 @@ class BDF(object):
             sdmDataMime = MIMEPart(self.fp, boundary=self.top_mime_bound)
             if sdmDataMime.loc != 'sdmDataHeader.xml':
                 raise RuntimeError('Invalid BDF: missing sdmDataHeader.xml')
-            self.sdmDataHeader = objectify.fromstring(sdmDataMime.body)
+            self.sdmDataHeader = objectify.fromstring(bytes(sdmDataMime.body, 'utf-8'))
             self.bin_size = {}
             self.bin_axes = {}
             for e in self.sdmDataHeader.iter():
@@ -144,7 +144,7 @@ class BDF(object):
                 self.mime_ints = [MIMEPart(self.fp,
                                            boundary=self.top_mime_bound,
                                            binary_size=self.bin_size,
-                                           recurse=True),]
+                                           recurse=True), ]
             # Compute size of each integration section:
                 self.size_ints = self.fp.tell() - self.offset_ints
                 numints = int((os.path.getsize(self.fname)-self.offset_ints)//self.size_ints)
@@ -226,8 +226,11 @@ class BDF(object):
         return self.get_integration(idx)
 
     def zerofraction(self, spwidx='all', type='cross'):
-        """Return zero fraction for the entire BDF.  This is done by loading
-        each integration's data so may take a while."""
+        """
+        Return zero fraction for the entire BDF.  This is done by loading
+        each integration's data so may take a while.
+        """
+
         tot = 0.0
         for i in self:
             tot += i.zerofraction(spwidx, type)
@@ -438,7 +441,7 @@ class BDFIntegration(object):
     def __init__(self, bdf, idx):
         # Get the main header
         self.sdmDataSubsetHeader = objectify.fromstring(
-                bdf._raw(idx).body[0].body)
+                bytes(bdf._raw(idx).body[0].body, 'utf-8'))
         # Copy some info from the BDF headers
         self.basebands = bdf.basebands
         self.spws = bdf.spws
@@ -715,7 +718,8 @@ class BDFWriter(object):
             self.fname = os.path.join(path, fname)
         else:
             self.fname = os.path.join(path,
-                                      uid.translate(string.maketrans(':/','__')))
+#                                      uid.translate(string.maketrans(':/','__')))
+                                      uid.replace(':/', '__').replace('/', '_'))
         self.fp = None
         self.curidx = 1
         self.mb1 = "MIME_boundary-1"
@@ -737,7 +741,7 @@ class BDFWriter(object):
 
     def write_header(self):
         """Open output and write the current header contents."""
-        self.fp = open(self.fname, 'w')
+        self.fp = open(self.fname, 'wb')
         tophdr = MIMEHeader()
         tophdr['MIME-Version'] = ['1.0', ]
         tophdr['Content-Type'] = ['multipart/mixed', 'boundary='+self.mb1]

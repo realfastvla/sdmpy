@@ -1,8 +1,8 @@
-from __future__ import print_function, division, absolute_import #, unicode_literals # not casa compatible
+from __future__ import print_function, division, absolute_import, unicode_literals # not casa compatible
 from builtins import bytes, dict, object, range, map, input#, str # not casa compatible
 from future.utils import itervalues, viewitems, iteritems, listvalues, listitems
+from io import open
 
-import string
 import numpy
 import os.path
 
@@ -13,7 +13,8 @@ from .bdf import BDF, ant2bl, bl2ant
 
 def uid2fname(s):
     """Convert uid URL to file name (mainly for BDFs)."""
-    return s.translate(string.maketrans(':/', '__'))
+#    return s.translate(string.maketrans(':/', '__'))
+    return s.replace(':/', '__').replace('/', '_')
 
 
 def sdmarray(s, dtype=None):
