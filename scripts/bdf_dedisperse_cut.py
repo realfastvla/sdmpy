@@ -55,23 +55,23 @@ os.mkdir(sdmout)
 os.mkdir(bdfoutpath)
 
 for scan in sdm.scans():
-    print "Processing '%s' scan %s:" % (sdmname, scan.idx)
+    print("Processing '{0}' scan {0}:".format(sdmname, scan.idx))
     try:
         bdf = scan.bdf
     except IOError:
-        print "Error reading bdf for scan %s, skipping" % (scan.idx,)
+        print("Error reading bdf for scan {0}, skipping".format(scan.idx))
         continue
 
     bdfoutname = bdfoutpath + '/' + os.path.basename(scan.bdf_fname)
 
     # Check either intent or int time, copy full scan if matching
     if (args.time>0 and bdf[0].interval>args.time):
-        print "  copying scan %s" % (scan.idx,)
+        print("  copying scan {0}".format(scan.idx))
         shutil.copy(scan.bdf_fname, bdfoutname)
         continue
 
     if scan.idx not in keep.keys():
-        print "  no integrations to keep for scan %s, skipping" % (scan.idx,)
+        print("  no integrations to keep for scan {0}, skipping".format(scan.idx))
         # Fill in X1
         scan._main.dataUID.EntityRef.attrib['entityId'] = 'uid://evla/bdf/X1'
         continue
