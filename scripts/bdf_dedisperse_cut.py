@@ -55,7 +55,7 @@ os.mkdir(sdmout)
 os.mkdir(bdfoutpath)
 
 for scan in sdm.scans():
-    print("Processing '{0}' scan {0}:".format(sdmname, scan.idx))
+    print("Processing '{0}' scan {1}:".format(sdmname, scan.idx))
     try:
         bdf = scan.bdf
     except IOError:
@@ -71,9 +71,10 @@ for scan in sdm.scans():
         continue
 
     if scan.idx not in keep.keys():
-        print("  no integrations to keep for scan {0}, skipping".format(scan.idx))
+        print("  no integrations to keep for scan {0}, skipping"
+              .format(scan.idx))
         # Fill in X1
-        scan._main.dataUID.EntityRef.attrib['entityId'] = 'uid://evla/bdf/X1'
+        scan._main.dataUID.EntityRef.attrib['entityId'] = b'uid://evla/bdf/X1'
         continue
 
     # If we got here, need to select appropriate integration(s), dedisperse
@@ -96,13 +97,14 @@ for scan in sdm.scans():
         int_interval = bdfint.sdmDataSubsetHeader.schedulePeriodTime.interval
 
         if offs==0:
-            t0 = int_time - int_interval/2
-            bdfout = sdmpy.bdf.BDFWriter(bdfoutpath, 
-                    fname=os.path.basename(scan.bdf_fname), bdf=bdf)
+            t0 = int_time - int(int_interval)//2
+            bdfout = sdmpy.bdf.BDFWriter(bdfoutpath,
+                                         fname=os.path.basename(scan.bdf_fname),
+                                         bdf=bdf)
             bdfout.sdmDataHeader.startTime = t0
             bdfout.write_header()
 
-        t1 = int_time + int_interval/2
+        t1 = int_time + int(int_interval)//2
 
         for dtype in bdfint.data.keys():
             # Copies the zero-delay data array
@@ -130,7 +132,7 @@ for scan in sdm.scans():
     scan._subscan.numSubintegration = ('1 %d' % nout) + ' 0'*nout
 
     # Why must time be stored in four separate places...??
-    scan._main.time = t0 # correct?
+    scan._main.time = t0  # correct?
     scan._main.interval = int_interval*nout
     scan._scan.startTime = t0
     scan._scan.endTime = t1
@@ -139,4 +141,3 @@ for scan in sdm.scans():
 
 # Write out new SDM tables
 sdm.write(sdmout)
-
