@@ -83,7 +83,7 @@ for scan in sdm.scans():
     dt = bdf[0].interval # in sec
     freqs = scan.freqs()/1e6
     delays = dm_delay(dm,freqs,freqs.max())
-    delays_samp = np.rint(delays/dt)
+    delays_samp = np.floor(delays/dt)
     uniq_delays_samp = sorted(set(delays_samp.ravel()))
     nint_read = delays_samp.max()+1 # number of integrations to read per event
 
