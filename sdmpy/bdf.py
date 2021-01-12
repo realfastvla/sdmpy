@@ -58,6 +58,9 @@ def bl2ant(i):
 # originally by Peter Williams.  So far this is somewhat targeted
 # to EVLA/WIDAR data files, it may not handle all the ALMA variants.
 
+_mmap_default = 'auto'
+_mmap_limit = 8<<30
+
 class BDF(object):
     """
     Class representing a single BDF file.  For example:
@@ -74,17 +77,39 @@ class BDF(object):
         b.numIntegration # number of integrations in file
         b.sdmDataHeader  # lxml objectify version of full header
 
+    The constructor takes a kwarg, use_mmap to specify whether the data
+    are read using mmap versus a simple read().  The former can handle
+    arbitrarily large files easily but seems to have poor performance on
+    some filesystems (lustre).  If use_mmap=False is specified you must
+    ensure there is enough free memory to hold the entire BDF file.
+    Allowed values for use_mmap are:
+    
+        True:       always use mmap
+        False:      never use mmap
+        'auto':     use mmap for files larger than sdmpy.bdf._mmap_limit
+                    (default 8GB) 
+        'default':  Apply setting from sdmpy.bdf._mmap_default
+
     """
 
-    def __init__(self, fname):
+    def __init__(self, fname, use_mmap='default'):
         self.fname = fname
         try:
             self.fp = open(fname, 'rb')
         except IOError:
             self.fp = None
         else:
-            self.mmdata = mmap.mmap(self.fp.fileno(), 0, mmap.MAP_PRIVATE,
-                                    mmap.PROT_READ)
+            if use_mmap=='default':
+                use_mmap = _mmap_default
+            if use_mmap=='auto':
+                fsize = self.fp.seek(0,os.SEEK_END)
+                self.fp.seek(0)
+                use_mmap = (fsize > _mmap_limit)
+            if use_mmap:
+                self.mmdata = mmap.mmap(self.fp.fileno(), 0, mmap.MAP_PRIVATE,
+                        mmap.PROT_READ)
+            else:
+                self.mmdata = self.fp.read()
             self.read_mime()
             self.parse_spws()
 
@@ -839,6 +864,8 @@ class BDFWriter(object):
         if self.len1 == 0:
             self.len1 = len(subhdr_str) + len(mhdr[dtypes[0]].tostring()) + 50
         nxpad = self.len1 - (len(subhdr_str) + len(mhdr[dtypes[0]].tostring()))
+        if nxpad < 0:
+            raise RuntimeError('nxpad(1)<0')
         mhdr[dtypes[0]]['X-pad'] = ['*'*nxpad, ]
 
         # Assumes at most 2 data types.. TODO make more general?
@@ -846,6 +873,8 @@ class BDFWriter(object):
             if self.len2 == 0:
                 self.len2 = len(mhdr[dtypes[1]].tostring()) + 12
             nxpad = self.len2 - len(mhdr[dtypes[1]].tostring())
+            if nxpad < 0:
+                raise RuntimeError('nxpad(2)<0')
             mhdr[dtypes[1]]['X-pad'] = ['*'*nxpad, ]
 
         # TODO should check that data sizes match up with header info..

@@ -8,8 +8,11 @@ import warnings
 import numpy as np
 from .scan import sdmarray
 
-# TODO maybe reconsider this dependency, although the MJD class is convenient
-from psrchive import MJD, polyco
+try:
+    import psrchive
+except ImportError:
+    psrchive = None
+
 import tempo_utils
 import tempfile
 def sdmpulsar_to_polyco(r,fmt='tempo_utils'):
@@ -19,8 +22,13 @@ def sdmpulsar_to_polyco(r,fmt='tempo_utils'):
     fmjd = (int(r.refTime) - int(imjd*86400e9))/86400e9
     reffreq = float(r.refPulseFreq)
     refphase = float(r.refPhase)
-    tspan = float(r.timeSpan)
-    coeffs = sdmarray(r.phasePoly,float)
+    try:
+        tspan = float(r.timeSpan)
+        coeffs = sdmarray(r.phasePoly,float)
+    except AttributeError:
+        # Constant-period case
+        tspan = 2.5*86400e9
+        coeffs = [0.0,]
 
     p.imjd = imjd
     p.fmjd = fmjd
@@ -36,10 +44,12 @@ def sdmpulsar_to_polyco(r,fmt='tempo_utils'):
         return p
 
     if fmt=='psrchive':
-        tmp = tempfile.NamedTemporaryFile()
+        if psrchive is None:
+            raise RuntimeError("psrchive-format polycos requires psrchive")
+        tmp = tempfile.NamedTemporaryFile(mode='w+')
         tmp.write(p.as_string())
         tmp.flush()
-        pp = polyco(tmp.name)
+        pp = psrchive.polyco(tmp.name)
         tmp.close()
         return pp
 
@@ -65,7 +75,7 @@ def _get_epoch_period(mjd):
         _bin_epochs = []
         _bin_periods = []
         for l in open(_bin_file, 'rb'):
-            # _bin_epochs += [MJD(l.split()[0]),]
+            # _bin_epochs += [psrchive.MJD(l.split()[0]),]
             # _bin_periods += [float(l.split()[1]),]
             if l.startswith('epoch '):
                 epoch_clk = int(l.split()[1])
@@ -73,7 +83,7 @@ def _get_epoch_period(mjd):
                 mjd_frac = (epoch_clk % _clk_per_day)/float(_clk_per_day)
             elif l.startswith('target period '):
                 p = float(l.split()[3])/float(_clk_per_sec)
-                _bin_epochs += [MJD(mjd_int, mjd_frac), ]
+                _bin_epochs += [psrchive.MJD(mjd_int, mjd_frac), ]
                 _bin_periods += [p, ]
 
     # Assumes input is a psrchive MJD.
@@ -103,7 +113,7 @@ class BinLog(object):
     def _clk_to_mjd(cls, clk):
         mjd_int = clk//cls._clk_per_day + cls._mjd1970
         mjd_frac = (clk % _clk_per_day)/float(_clk_per_day)
-        return MJD(mjd_int, mjd_frac)
+        return psrchive.MJD(mjd_int, mjd_frac)
 
     def _read(self):
         # Actually read the file
@@ -170,17 +180,18 @@ def rotate_phase_fft(data, turns, axis=1):
 
 
 def dedisperse_array(data, dm, freq, period, bin_axis=1, freq_axis=2,
-                     spw_axis=None):
+                     spw_axis=None, phase_shift=0.0):
     """
     Dedisperse a generic array of data, of which one axis represents an
     entire turn of pulse phase, even sampled into bins.  freq should be an
     array giving the frequencies in MHz.  Up to two separate freq axes are
     allowed, given by the spw_axis and freq_axis arguments.  If spw_axis is
     None (not used), freq should be a 1-D array of freqs.  If spw_axis is
-    set, freq should have dims (nspw, nchan).
+    set, freq should have dims (nspw, nchan).  An additional pulse phase 
+    shift can be included via phase_shift (turns).
     """
 
-    dp = -dm_delay(dm, freq)/period
+    dp = -dm_delay(dm, freq)/period + phase_shift
     nchan = data.shape[freq_axis]
     fslice = [slice(None), ] * len(data.shape)
     fshape = list(data.shape)
@@ -201,7 +212,7 @@ def dedisperse_array(data, dm, freq, period, bin_axis=1, freq_axis=2,
                 dtmp = data.take(ichan, axis=freq_axis).reshape(fshape)
             else:
                 dtmp = dtmp0.take([ichan, ], axis=freq_axis).reshape(fshape)
-            data[fslice] = rotate_phase(dtmp, dp[ispw, ichan],
+            data[tuple(fslice)] = rotate_phase(dtmp, dp[ispw, ichan],
                                         axis=bin_axis).squeeze()
 
 # def dedisperse(scan,dm,period=None,bar=lambda x: x):
